@@ -1,0 +1,57 @@
+MON RYTHME SLEEVE 2.1 BETA — COMPAGNONS
+
+Cette archive contient le projet Android complet. Ce n'est pas un APK.
+La compilation et les tests automatisés n'ont pas été exécutés avant livraison.
+Le workflow fourni les exécutera sur GitHub avant de proposer l'APK.
+
+NOUVEAUTES
+- Huit animaux à adopter et à nommer.
+- Six poses illustrées et mouvements doux : repos, repas, boisson, bouderie,
+  fête et sommeil. Il s'agit d'animations simples des poses, pas d'une animation
+  indépendante de chaque patte, aile ou oreille.
+- Les boutons On mange et On boit suivent le planning. Les repas sont inscrits
+  dans l'historique habituel ; la dernière boisson est mémorisée.
+- Câlin gratuit, sans repas supplémentaire. Pas de mort ni de perte de cadeaux.
+- Accessoire tous les deux jours depuis l'adoption ; décor chaque dimanche
+  suivant l'adoption. Cadeaux cumulés en cas d'absence, à ouvrir dans l'appli.
+- Six formes d'accessoires et quatre thèmes de décor avec éditions colorées.
+- Changement d'animal sans remettre à zéro l'adoption ou les récompenses.
+- Correction du début réel, avant ou après la fin d'un repas, avec confirmation.
+  Les fins réelles et les prises suivantes déjà enregistrées sont préservées.
+
+IMPORTER SUR GITHUB
+1. Extraire le ZIP.
+2. Ouvrir ton dépôt MonRythmeSleeve-V2, onglet Code.
+3. Add file > Upload files : importer le CONTENU du dossier extrait à la racine,
+   notamment app, build.gradle.kts, settings.gradle.kts et gradle.properties.
+   Ne pas créer un dossier MonRythmeSleeve supplémentaire dans le dépôt.
+4. Le fichier .github/workflows/build.yml doit aussi être remplacé. Si le dossier
+   .github est masqué ou refusé à l'import, ouvrir le fichier déjà présent sur
+   GitHub, cliquer sur le crayon et coller le contenu du build.yml fourni.
+5. Valider avec Commit changes.
+6. Ouvrir Actions > Construire Mon Rythme Sleeve V2 APK.
+7. Après succès (coche verte), télécharger l'archive dans Artifacts, l'extraire,
+   puis ouvrir app-debug.apk sur le téléphone.
+
+SIGNATURE ET DONNEES
+L'identifiant Android V2 est conservé : fr.monrythmesleeve.app.beta.
+L'ancien workflow fabriquait une nouvelle clé debug sur les machines de
+compilation sans la sauvegarder explicitement. Une installation par-dessus
+la V2 existante peut donc être refusée à cause d'une signature différente.
+Ne pas désinstaller l'ancienne application si cela arrive : ses données
+locales seraient effacées. Garder le message exact pour chercher une solution.
+Le nouveau workflow conserve la clé debug dans le cache GitHub pour les
+compilations suivantes. Ce cache n'est pas une sauvegarde permanente : pour
+une distribution durable, il faudra une clé de signature sauvegardée en lieu sûr.
+
+VERIFICATION SUR TELEPHONE
+- Choisir chaque animal et vérifier l'affichage des six poses.
+- Tester le mode sombre, la rotation, et la désactivation des animations.
+- Vérifier un repas commencé 11 minutes auparavant : le compte à rebours doit
+  utiliser l'heure corrigée, et les alertes doivent suivre les nouveaux horaires.
+- Vérifier que On boit est indisponible pendant les pauses et pendant un repas
+  non terminé, et disponible à la reprise prévue.
+- Vérifier les accessoires après deux jours et les décors le dimanche suivant.
+
+Le code source de départ provient du dépôt au commit
+952fbf2fa1ddcc074e662903b0cd86c43d476a82.
