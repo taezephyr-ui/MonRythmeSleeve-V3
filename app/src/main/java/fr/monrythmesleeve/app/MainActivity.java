@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
         if(PetStore.adopted(this)){try{CompanionIcon.apply(this,PetStore.prefs(this).getInt("species",0));}catch(RuntimeException ignored){}}
         show(0);
     }
-    @Override protected void onResume(){super.onResume();if(house!=null)house.resume();handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(true);handler.post(ticker);}
+    @Override protected void onResume(){super.onResume();WatchMeals.publish(this);if(house!=null)house.resume();handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(true);handler.post(ticker);}
     @Override protected void onPause(){if(house!=null)house.pause();handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(false);super.onPause();}
     @Override public void onRequestPermissionsResult(int code,String[] perms,int[] results){
         super.onRequestPermissionsResult(code,perms,results);
@@ -174,7 +174,7 @@ public class MainActivity extends Activity {
             TextView glyph=text(ICONS[i],22,i==tab?accent:muted,true);glyph.setGravity(Gravity.CENTER);cell.addView(glyph);
             TextView word=text(TABS[i],10,i==tab?accent:muted,i==tab);word.setGravity(Gravity.CENTER);cell.addView(word);
             cell.setOnClickListener(v->show(target));nav.addView(cell,new LinearLayout.LayoutParams(0,dp(57),1));
-        }root.addView(nav);
+        }root.addView(nav);WatchMeals.publish(this);
     }
     private String encouragement(){
         int hour=java.time.LocalTime.now().getHour();

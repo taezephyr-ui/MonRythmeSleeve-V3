@@ -76,6 +76,11 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+        <service android:name=".WatchMeals" android:exported="true">
+            <intent-filter><action android:name="com.google.android.gms.wearable.DATA_CHANGED"/>
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/sleeve/"/>
+            </intent-filter>
+        </service>
     </application>
 </manifest>
 

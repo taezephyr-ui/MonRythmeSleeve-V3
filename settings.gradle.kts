@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "MonRythmeSleeve"
-include(":app")
+include(":app", ":wear")
 

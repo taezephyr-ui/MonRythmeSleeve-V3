@@ -46,7 +46,7 @@ jobs:
           key: sleeve-v2-stable-debug-signing-v1
 
       - name: Tester et compiler APK beta
-        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :wear:assembleDebug
 
       - name: Conserver les resultats des tests
         if: always()
@@ -63,6 +63,23 @@ jobs:
           apk=app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk"
           unzip -p "$apk" assets/pipou.html | cmp - app/src/main/assets/pipou.html
+
+      - name: Verifier la signature de la montre
+        shell: bash
+        run: |
+          set -euo pipefail
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          for module in app wear; do
+            "$signer" verify --print-certs "$module/build/outputs/apk/debug/$module-debug.apk" | grep 'certificate SHA-256 digest:' > "$module.cert"
+          done
+          cmp app.cert wear.cert
+
+      - name: Mettre APK montre a disposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonRythmeSleeve-Montre-APK
+          path: wear/build/outputs/apk/debug/wear-debug.apk
+          if-no-files-found: error
 
       - name: Mettre APK a disposition
         uses: actions/upload-artifact@v4

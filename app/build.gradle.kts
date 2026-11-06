@@ -10,8 +10,8 @@ android {
         applicationId = "fr.monrythmesleeve.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 31
-        versionName = "3.0.1-beta"
+        versionCode = 32
+        versionName = "3.0.2-beta"
     }
     buildTypes {
         getByName("debug") {
@@ -27,6 +27,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-wearable:18.2.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
 }

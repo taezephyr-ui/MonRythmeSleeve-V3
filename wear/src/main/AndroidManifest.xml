@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-feature android:name="android.hardware.type.watch" android:required="true"/>
+  <application android:label="Mon Rythme Sleeve" android:allowBackup="false" android:theme="@android:style/Theme.Material.NoActionBar">
+    <meta-data android:name="com.google.android.wearable.standalone" android:value="false"/>
+    <activity android:name=".MealActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+  </application>
+</manifest>
