@@ -157,7 +157,7 @@ public class MainActivity extends Activity {
         LinearLayout head=vertical();head.setPadding(dp(20),dp(15),dp(18),dp(14));head.setBackgroundColor(dark?0xCC191520:0xDFFFFFFF);
         head.addView(text("✿  Mon Rythme Sleeve",20,accent,true));
         String date=LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM",Locale.FRANCE));
-        head.addView(text(date.substring(0,1).toUpperCase(Locale.FRANCE)+date.substring(1),12,muted,false));root.addView(head);
+        head.addView(text(date.substring(0,1).toUpperCase(Locale.FRANCE)+date.substring(1),12,muted,false));if(index!=5)root.addView(head);
         if(index==5){
             house=new PipouHouse(this);
             root.addView(house.game,new LinearLayout.LayoutParams(-1,0,1));

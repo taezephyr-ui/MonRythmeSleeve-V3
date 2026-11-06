@@ -24,10 +24,21 @@ final class PipouHouse {
         settings.setAllowContentAccess(false);
         settings.setBlockNetworkLoads(true);
         game.setWebViewClient(new WebViewClient(){
-            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){return true;}
+            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){
+                android.net.Uri uri=r.getUrl();
+                if(r.isForMainFrame() && "pipou".equals(uri.getScheme()) && "rename".equals(uri.getHost())){
+                    String name=uri.getQueryParameter("name");
+                    if(name!=null && !name.trim().isEmpty() && name.trim().length()<=24)
+                        PetStore.prefs(host).edit().putString("name",name.trim()).apply();
+                }
+                return true;
+            }
             @Override public void onPageFinished(WebView v,String url){
                 if(!"file:///android_asset/pipou.html".equals(url))return;
-                if(game!=v)return;ready=true;if(foreground)sync();
+                if(game!=v)return;ready=true;
+                String name=PetStore.prefs(host).getString("name","Pipou");
+                game.evaluateJavascript("window.setCompanionName("+JSONObject.quote(name)+")",null);
+                if(foreground)sync();
             }
         });
 
