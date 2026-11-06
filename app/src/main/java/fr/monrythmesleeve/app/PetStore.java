@@ -8,7 +8,7 @@ import java.time.ZoneId;
 
 public final class PetStore {
     public static final String[] NAMES={"Petit dragon","Petit cochon","Petite loutre","Petit chat","Panda roux","Petit axolotl","Petit lapin","Petit hérisson"};
-    public static final String[] ACCESSORIES={"Nœud","Couronne","Lunettes","Écharpe","Fleur","Chapeau"};
+    public static final String[] ACCESSORIES={"Nœud en satin","Couronne dorée","Lunettes rondes","Écharpe tissée","Fleur délicate","Chapeau en feutre"};
     public static final String[] DECORS={"Jardin fleuri","Nuit étoilée","Bord de mer","Forêt enchantée"};
     public static SharedPreferences prefs(Context c){return c.getSharedPreferences("sleeve_companion",Context.MODE_PRIVATE);}
     public static boolean adopted(Context c){return prefs(c).contains("adopted");}

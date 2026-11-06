@@ -59,4 +59,68 @@ public class CompanionTest {
         assertEquals(1470,ScheduleStore.minuteOf(d,ScheduleStore.at(d,1470)));
         assertEquals(1,PetRules.accessories(d,d.plusDays(2)));
     }
+    @Test public void finishCorrectionRecalculatesPendingMealsAndKeepsStart(){
+        LocalDate d=ScheduleStore.day(c);long start=ScheduleStore.at(d,0)+1000;
+        try(HistoryStore db=new HistoryStore(c)){
+            db.start(d.toString(),0,"Breakfast",start,start);
+            db.finish(d.toString(),0,"Breakfast",start,start+1000);
+        }
+        long end=start+60_000;
+        assertNull(ScheduleStore.correctFinish(c,d,0,end));
+        assertEquals(start,ScheduleStore.record(c,d,0).started);
+        assertEquals(end,ScheduleStore.record(c,d,0).finished);
+        assertEquals(end,ScheduleStore.expectedEnd(c,d,0));
+        assertEquals(152,ScheduleStore.times(c)[1]);
+        assertEquals(332,ScheduleStore.times(c)[2]);
+        assertNotNull(ScheduleStore.correctFinish(c,d,0,start-1));
+        assertNotNull(ScheduleStore.correctFinish(c,d,0,System.currentTimeMillis()+60_000));
+        assertEquals(end,ScheduleStore.record(c,d,0).finished);
+    }
+    @Test public void finishCorrectionPreservesLaterRealMealAndItsPlanning(){
+        LocalDate d=ScheduleStore.day(c);long start=ScheduleStore.at(d,0)+1000;
+        try(HistoryStore db=new HistoryStore(c)){
+            db.start(d.toString(),0,"Breakfast",start,start);
+            db.finish(d.toString(),0,"Breakfast",start,start+1000);
+            db.start(d.toString(),2,"Lunch",start+6000,start+6000);
+            db.finish(d.toString(),2,"Lunch",start+6000,start+7000);
+        }
+        int original=ScheduleStore.times(c)[2],last=ScheduleStore.times(c)[3];
+        assertNull(ScheduleStore.correctFinish(c,d,0,start+2000));
+        assertEquals(start+6000,ScheduleStore.record(c,d,2).started);
+        assertEquals(start+7000,ScheduleStore.record(c,d,2).finished);
+        assertEquals(original,ScheduleStore.times(c)[2]);assertEquals(last,ScheduleStore.times(c)[3]);
+        assertNotNull(ScheduleStore.correctFinish(c,d,0,start+6500));
+        assertEquals(start+2000,ScheduleStore.record(c,d,0).finished);
+    }
+    @Test public void historicalFinishCorrectionNeverChangesToday(){
+        LocalDate today=ScheduleStore.day(c),d=today.minusDays(1);long end=ScheduleStore.at(d,1470);
+        try(HistoryStore db=new HistoryStore(c)){db.finish(d.toString(),5,"Old snack",end-1800000,end);}
+        int[] original=ScheduleStore.times(c);
+        assertNull(ScheduleStore.correctFinish(c,d,5,end+60_000));
+        assertEquals(1471,ScheduleStore.minuteOf(d,ScheduleStore.record(c,d,5).finished));
+        assertArrayEquals(original,ScheduleStore.times(c));
+        assertEquals(0,ScheduleStore.record(c,d,5).started);
+    }
+    @Test public void rewardPreviewsMatchCalendarAndProgress(){
+        LocalDate friday=LocalDate.of(2026,10,16),sunday=friday.plusDays(2);
+        assertEquals(sunday,PetRules.nextAccessory(friday,0));
+        assertEquals(sunday,PetRules.nextSpecial(friday,0));
+        assertEquals(sunday.plusDays(7),PetRules.nextSpecial(friday,1));
+        assertEquals(50,PetRules.progress(friday,sunday,friday.plusDays(1)));
+        assertEquals(100,PetRules.progress(friday,sunday,sunday.plusDays(2)));
+        assertEquals(0,PetRules.progress(friday,sunday,friday.minusDays(2)));
+        assertEquals(sunday.plusDays(7),PetRules.nextSpecial(sunday,0));
+    }
+    @Test public void launcherSwitchKeepsOneIconAndActivityEnabled(){
+        android.content.pm.PackageManager pm=c.getPackageManager();
+        for(int chosen=0;chosen<8;chosen++){
+            CompanionIcon.apply(c,chosen);
+            for(int i=-1;i<8;i++){
+                android.content.ComponentName component=new android.content.ComponentName(c.getPackageName(),"fr.monrythmesleeve.app.Launcher"+(i<0?"Default":i));
+                assertEquals(i==chosen?android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED:android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,pm.getComponentEnabledSetting(component));
+            }
+            assertNotEquals(android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,pm.getComponentEnabledSetting(new android.content.ComponentName(c,MainActivity.class)));
+        }
+    }
+    @Test @Config(sdk=33) public void launcherSwitchIsAtomicOnNewerAndroid(){launcherSwitchKeepsOneIconAndActivityEnabled();}
 }

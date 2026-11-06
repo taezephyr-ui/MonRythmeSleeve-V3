@@ -16,7 +16,7 @@ import java.util.Locale;
 public final class ScheduleStore {
     private ScheduleStore() { }
     public static final int MEAL_DURATION=30, DRINKS_BEFORE=30, DRINKS_AFTER=30;
-    public static final String[] NAMES={"Petit-déjeuner","Collation 1","Déjeuner","Collation 2","Dîner","Collation 6"};
+    public static final String[] NAMES={"Petit-déjeuner","Collation 1","Déjeuner","Collation 2","Dîner","Collation 3"};
     private static final String PREFS="mon_rythme_sleeve_v2";
     public static SharedPreferences prefs(Context c){return c.getSharedPreferences(PREFS,Context.MODE_PRIVATE);}
     public static int gap(Context c){int n=prefs(c).getInt("gap",150);return n==165||n==180?n:150;}
@@ -122,13 +122,41 @@ public final class ScheduleStore {
     }
     public static boolean finish(Context c,int index,long actual){
         if(index<0||index>=count(c)||completed(c,index))return false;
-        LocalDate d=day(c);int[] t=times(c);HistoryStore.Entry r=record(c,d,index);
-        if(r!=null&&r.started>actual)return false;
-        try(HistoryStore db=new HistoryStore(c)){db.finish(d.toString(),index,name(index),at(d,t[index]),actual);}
-        int next=ceilMinuteOf(d,actual+gap(c)*60_000L),step=gap(c)+MEAL_DURATION;
-        SharedPreferences.Editor e=prefs(c).edit();
-        for(int i=index+1;i<count(c);i++)e.putInt("day_meal_"+i,next+(i-index-1)*step);
-        e.apply();return true;
+        return correctFinish(c,day(c),index,actual)==null;
+    }
+    /** Edit a real finish without inventing a start or overwriting later records. */
+    public static String correctFinish(Context c,LocalDate d,int index,long actual){
+        if(index<0||index>=6)return "Cette prise est introuvable.";
+        HistoryStore.Entry r=record(c,d,index);
+        if(actual>System.currentTimeMillis()||actual<at(d,0)||actual>=at(d,2880))
+            return "Choisis une heure passée de cette journée ou du lendemain.";
+        if(r!=null&&r.started>actual)return "La fin doit suivre le début enregistré.";
+        for(int j=0;j<6;j++){
+            if(j==index)continue;
+            HistoryStore.Entry other=record(c,d,j);
+            if(other==null)continue;
+            if(j<index&&(other.started>actual||other.finished>actual||(other.started>0&&other.finished==0)))
+                return "Vérifie la fin des prises précédentes.";
+            if(j>index&&((other.started>0&&other.started<actual)||(other.finished>0&&other.finished<actual)))
+                return "La fin doit précéder les prises suivantes déjà enregistrées.";
+        }
+        boolean current=d.equals(day(c));
+        if(!current&&r==null)return "Cette prise n'est pas enregistrée dans l'historique.";
+        int[] t=timesFor(c,d);
+        try(HistoryStore db=new HistoryStore(c)){
+            db.finish(d.toString(),index,name(index),r==null?at(d,t[index]):r.planned,actual);
+        }
+        if(current){
+            SharedPreferences.Editor edit=prefs(c).edit();
+            int next=ceilMinuteOf(d,actual+gap(c)*60_000L);
+            for(int j=index+1;j<count(c);j++){
+                HistoryStore.Entry other=record(c,d,j);
+                if(other!=null&&(other.started>0||other.finished>0))break;
+                edit.putInt("day_meal_"+j,next);next+=MEAL_DURATION+gap(c);
+            }
+            edit.apply();
+        }
+        return null;
     }
     public static long expectedEnd(Context c,LocalDate d,int i){
         HistoryStore.Entry r=record(c,d,i);
