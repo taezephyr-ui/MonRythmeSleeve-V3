@@ -10,8 +10,8 @@ android {
         applicationId = "fr.monrythmesleeve.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 21
-        versionName = "2.1.0-beta"
+        versionCode = 31
+        versionName = "3.0.1-beta"
     }
     buildTypes {
         getByName("debug") {

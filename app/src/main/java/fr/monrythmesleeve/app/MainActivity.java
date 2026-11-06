@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
     private static final String[] TABS={"Accueil","Planning","Historique","Alertes","Paramètres","Compagnon"};
     private static final String[] ICONS={"⌂","▦","◷","♧","⚙","♡"};
     private static final String[] CARDS={"statut","prochaine","repas_0","repas_1","repas_2","repas_3","repas_4","repas_5","soutien","historique","fond"};
-    private static final String[] CARD_NAMES={"Statut / hydratation","Prochaine étape","Petit-déjeuner","Collation 1","Déjeuner","Collation 2","Dîner","Collation 6","Message d'accueil","Historique","Fond général"};
+    private static final String[] CARD_NAMES={"Statut / hydratation","Prochaine étape","Petit-déjeuner","Collation 1","Déjeuner","Collation 2","Dîner","Collation 3","Message d'accueil","Historique","Fond général"};
     private static final String[] PATTERNS={"Uni","Dégradé","Fleurs","Feuilles","Bulles","Étoiles","Vagues"};
     private static final String[] COLOR_NAMES={"Rose poudré","Lavande","Bleu ciel","Vert sauge","Pêche","Crème","Prune","Turquoise","Nuit"};
     private static final int[] COLORS={0xFFF7DDEA,0xFFE5DDF7,0xFFDDEDFC,0xFFDDEEE4,0xFFFFE2D0,0xFFFFF1D6,0xFFB29BC9,0xFFCCEDEB,0xFF302B45};
@@ -69,6 +69,9 @@ public class MainActivity extends Activity {
     private PetView petView;
     private TextView petMessage,petRewards;
     private Button petDrink,petEat;
+    private LinearLayout rewardPanel;
+    private String rewardStamp="";
+    private final List<PetView> petSurfaces=new ArrayList<>();
     private long petRefresh=0,petActionUntil=0;
     private int petAction=0;
 
@@ -78,10 +81,11 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},200);
         welcomeVariant=ScheduleStore.prefs(this).getInt("opening_count",0);
         ScheduleStore.prefs(this).edit().putInt("opening_count",welcomeVariant+1).apply();
+        if(PetStore.adopted(this)){try{CompanionIcon.apply(this,PetStore.prefs(this).getInt("species",0));}catch(RuntimeException ignored){}}
         show(0);
     }
-    @Override protected void onResume(){super.onResume();handler.removeCallbacks(ticker);handler.post(ticker);}
-    @Override protected void onPause(){handler.removeCallbacks(ticker);super.onPause();}
+    @Override protected void onResume(){super.onResume();handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(true);handler.post(ticker);}
+    @Override protected void onPause(){handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(false);super.onPause();}
     @Override public void onRequestPermissionsResult(int code,String[] perms,int[] results){
         super.onRequestPermissionsResult(code,perms,results);
         if(code==200&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)AlarmScheduler.rescheduleAll(this);
@@ -142,6 +146,7 @@ public class MainActivity extends Activity {
     private String cardTitle(String id){for(int i=0;i<CARDS.length;i++)if(CARDS[i].equals(id))return CARD_NAMES[i];return id;}
     private void title(String heading,String subtitle){page.addView(text(heading,22,ink,true));gap(page,5);if(!subtitle.isEmpty())page.addView(text(subtitle,13,muted,false));gap(page,16);}
     private void show(int index){
+        for(PetView view:petSurfaces)view.setForeground(false);petSurfaces.clear();
         tab=index;petView=null;petRefresh=0;lastEventRefresh=0;cachedEvents=null;theme();root=vertical();root.setBackground(style("fond"));setContentView(root);
         getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(navBg);
         getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
@@ -208,6 +213,10 @@ public class MainActivity extends Activity {
             }
             gap(c,7);Button correct=button(entry!=null&&entry.started>0?"Corriger mon heure de début":"J'ai déjà commencé…",false);
             correct.setOnClickListener(v->correctMealStart(meal));add(c,correct,0);
+            if(entry!=null&&(entry.started>0||entry.finished>0)){
+                Button end=button("Modifier l'heure de fin",false);
+                end.setOnClickListener(v->correctMealFinish(d,meal));gap(c,7);add(c,end,0);
+            }
             add(page,c,10);
         }
     }
@@ -282,7 +291,21 @@ public class MainActivity extends Activity {
         LinearLayout edit=card("prochaine");edit.addView(text("Prise de référence",14,ink,true));gap(edit,5);
         Spinner spinner=new Spinner(this);String[] names=new String[ScheduleStore.count(this)];
         System.arraycopy(ScheduleStore.NAMES,0,names,0,names.length);
-        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names);spinner.setAdapter(adapter);
+        ArrayAdapter<String> adapter=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_item,names){
+            private View mealLabel(int position,View recycled,ViewGroup parent,boolean dropdown){
+                TextView label=(TextView)(dropdown?super.getDropDownView(position,recycled,parent):super.getView(position,recycled,parent));
+                boolean mainMeal=position==0||position==2||position==4;
+                label.setTypeface(Typeface.DEFAULT,mainMeal?Typeface.BOLD:Typeface.NORMAL);
+                label.setTextSize(mainMeal?16:14);label.setTextColor(mainMeal?ink:muted);
+                label.setPadding(dp(14),dp(12),dp(14),dp(12));label.setMinHeight(dp(48));
+                label.setBackgroundColor(dropdown?(mainMeal?(dark?0xFF41344C:0xFFF2E6F3):navBg):Color.TRANSPARENT);
+                label.setContentDescription((mainMeal?"Repas principal : ":"")+getItem(position));
+                return label;
+            }
+            @Override public View getView(int position,View recycled,ViewGroup parent){return mealLabel(position,recycled,parent,false);}
+            @Override public View getDropDownView(int position,View recycled,ViewGroup parent){return mealLabel(position,recycled,parent,true);}
+        };
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);spinner.setAdapter(adapter);
         if(anchor>=names.length)anchor=4;spinner.setSelection(anchor);edit.addView(spinner,new LinearLayout.LayoutParams(-1,dp(46)));
         gap(edit,8);edit.addView(text("Horaire souhaité",14,ink,true));gap(edit,7);
         selectedMinute=ScheduleStore.times(this)[anchor];
@@ -309,7 +332,7 @@ public class MainActivity extends Activity {
         calculate.setOnClickListener(v->{
             if(ScheduleStore.saveAnchor(this,anchor,selectedMinute,chosenGap)){AlarmScheduler.rescheduleAll(this);toast("Nouveau planning enregistré.");show(1);}
             else new AlertDialog.Builder(this).setTitle("Horaires incompatibles")
-                .setMessage("Le premier repas commencerait trop tôt ou le dîner prévu finirait après minuit. Choisis un autre horaire. La 6e collation peut, elle, dépasser minuit.")
+                .setMessage("Le premier repas commencerait trop tôt ou le dîner prévu finirait après minuit. Choisis un autre horaire. La collation 3 peut, elle, dépasser minuit.")
                 .setPositiveButton("OK",null).show();
         });add(edit,calculate,0);add(page,edit,17);
         page.addView(text("Mes horaires du jour",18,ink,true));gap(page,10);listMeals(true);
@@ -327,11 +350,13 @@ public class MainActivity extends Activity {
                 page.addView(text(d.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy",Locale.FRANCE)),17,accent,true));gap(page,8);
                 previous=r.day;
             }
-            LinearLayout c=card("historique");c.addView(text(r.title,16,ink,true));gap(c,7);
+            LinearLayout c=card("historique");c.addView(text(ScheduleStore.name(r.meal),16,ink,true));gap(c,7);
             line(c,"Début réel",r.started>0?historyStamp(r,r.started):"Non enregistré");
             line(c,"Fin réelle",r.finished>0?historyStamp(r,r.finished):"En cours / non enregistrée");
             if(r.started>0&&r.finished>=r.started){long min=(r.finished-r.started)/60_000L;line(c,"Durée réelle",min+" min");}
-            add(page,c,9);
+            Button edit=button("Modifier l'heure de fin",false);
+            edit.setOnClickListener(v->correctMealFinish(LocalDate.parse(r.day),r.meal));
+            gap(c,8);add(c,edit,0);add(page,c,9);
         }
         page.addView(text("La collation après minuit reste classée dans la journée à laquelle elle appartient.",12,muted,false));
     }
@@ -385,13 +410,13 @@ public class MainActivity extends Activity {
         LinearLayout nutrition=card("repas_4");nutrition.addView(text("Mes prises alimentaires",17,ink,true));gap(nutrition,7);
         nutrition.addView(text("5 prises par défaut · 30 min chacune · arrêt/reprise boissons ±30 min",13,muted,false));gap(nutrition,7);
         add(page,nutrition,5);
-        toggle("Activer la 6e collation","Après le dîner, même après minuit",ScheduleStore.count(this)==6,on->{
-            ScheduleStore.setSixth(this,on);AlarmScheduler.rescheduleAll(this);toast(on?"6e collation activée":"6e collation désactivée");show(4);
+        toggle("Activer la collation 3","Après le dîner, même après minuit",ScheduleStore.count(this)==6,on->{
+            ScheduleStore.setSixth(this,on);AlarmScheduler.rescheduleAll(this);toast(on?"collation 3 activée":"collation 3 désactivée");show(4);
         });
         gap(page,9);
         LinearLayout hint=card("historique");hint.addView(text("Vie privée et sauvegarde",15,ink,true));gap(hint,6);
         hint.addView(text("Tes horaires, ton prénom et ton historique restent stockés localement. Les photos choisies ne sont pas envoyées sur Internet. Garde l'application V1 installée pendant les tests de cette bêta.",13,muted,false));
-        gap(hint,9);hint.addView(text("Mon Rythme Sleeve · Version 2.1 bêta",12,muted,false));add(page,hint,10);
+        gap(hint,9);hint.addView(text("Mon Rythme Sleeve · Version 3.0 bêta",12,muted,false));add(page,hint,10);
     }
     private void chooseTheme(){
         String[] choices={"Clair","Sombre","Automatique (selon le téléphone)"};String[] vals={"CLAIR","SOMBRE","AUTO"};
@@ -457,87 +482,170 @@ public class MainActivity extends Activity {
             .setItems(new String[]{day.toString(),day.plusDays(1)+" (lendemain)"},(d,w)->choose.accept(day.plusDays(w))).show();
         else choose.accept(day);
     }
+    private void correctMealFinish(LocalDate day,int meal){
+        HistoryStore.Entry entry=ScheduleStore.record(this,day,meal);
+        long initial=entry!=null&&entry.finished>0?entry.finished:System.currentTimeMillis();
+        java.time.ZonedDateTime z=Instant.ofEpochMilli(initial).atZone(ZoneId.systemDefault());
+        new AlertDialog.Builder(this).setTitle("Date de fin réelle")
+            .setItems(new String[]{day+" (jour du planning)",day.plusDays(1)+" (lendemain)"},(dialog,choice)->{
+                LocalDate date=day.plusDays(choice);
+                new TimePickerDialog(this,(view,h,m)->{
+                    long actual=ScheduleStore.at(date,h*60+m);
+                    new AlertDialog.Builder(this).setTitle("Confirmer l'heure de fin")
+                        .setMessage(ScheduleStore.name(meal)+" : "+date+" à "+ScheduleStore.hhmm(h*60+m)
+                            +"\nReprise des boissons : "+ScheduleStore.displayTimestamp(actual+30*60_000L)
+                            +"\nLes prises suivantes non enregistrées et les notifications seront ajustées. Les heures réelles déjà enregistrées seront conservées.")
+                        .setPositiveButton("Enregistrer",(d,w)->{
+                            String error=ScheduleStore.correctFinish(this,day,meal,actual);
+                            if(error!=null){toast(error);return;}
+                            AlarmScheduler.rescheduleAll(this);toast("Heure de fin corrigée.");show(tab);
+                        }).setNegativeButton("Annuler",null).show();
+                },z.getHour(),z.getMinute(),true).show();
+            }).setNegativeButton("Annuler",null).show();
+    }
     private void companion(){
-        title("Mon petit compagnon ♡","On prend soin de nous, ensemble.");
+        Button openPipou=button("Retrouver Pipou dans sa maison",true);
+        openPipou.setOnClickListener(v->startActivity(new Intent(this,PipouActivity.class)));
+        add(page,openPipou,12);
+        title("La maison de mon compagnon","Une petite vie à partager, à notre rythme.");
         if(!PetStore.adopted(this)){adoptionGallery();return;}
         android.content.SharedPreferences p=PetStore.prefs(this);
         LinearLayout room=card("soutien");room.addView(text(PetStore.name(this),24,ink,true));
         room.addView(text("Ensemble depuis "+PetRules.days(PetStore.adoption(this),LocalDate.now())+" jours",13,muted,false));
-        petView=new PetView(this,p.getInt("species",0));room.addView(petView,new LinearLayout.LayoutParams(-1,dp(270)));
-        petView.setOnClickListener(v->{PetStore.care(this);playPet(4);});
+        petView=new PetView(this,p.getInt("species",0));petSurfaces.add(petView);
+        room.addView(petView,new LinearLayout.LayoutParams(-1,dp(350)));
+        petView.setInteraction(action->{
+            if("drink".equals(action)){drinkWithPet();return;}
+            if("eat".equals(action)){eatWithPet();return;}
+            if("sleep".equals(action)){restPet();return;}
+            if("cuddle".equals(action)){PetStore.care(this);playPet(4);return;}
+            toast("Touche l'assiette, le verre, le lit ou ton compagnon.");
+        });
+        room.addView(text("Touche l'assiette, le verre, le lit ou ton compagnon.",12,muted,false));gap(room,10);
         petMessage=text("",15,ink,true);add(room,petMessage,12);
-        petDrink=button("On boit 💧",true);petDrink.setOnClickListener(v->{
-            PetStore.State state=PetStore.state(this,System.currentTimeMillis());
-            if(!state.drink){toast("C'est la pause boissons. Ton compagnon se repose aussi.");petRefresh=0;refreshPet();return;}
-            PetStore.prefs(this).edit().putLong("drink",System.currentTimeMillis()).apply();PetStore.care(this);playPet(2);toast("Ta prise de boisson est enregistrée.");
-        });add(room,petDrink,8);
-        petEat=button("On mange 🍽",true);petEat.setOnClickListener(v->{
-            PetStore.State state=PetStore.state(this,System.currentTimeMillis());
-            if(state.active){show(0);return;}
-            if(state.meal<0){toast("La prochaine prise n'est pas encore prévue.");return;}
-            final int meal=state.meal;
-            new AlertDialog.Builder(this).setTitle(ScheduleStore.name(meal))
-                .setItems(new String[]{"Je commence maintenant","J'ai déjà commencé…"},(d,w)->{
-                    if(w==1){correctMealStart(meal);return;}
-                    if(ScheduleStore.begin(this,meal,System.currentTimeMillis())){
-                        PetStore.care(this);AlarmScheduler.rescheduleAll(this);petRefresh=0;playPet(1);toast("Repas commencé pour vous deux. Pense à enregistrer la fin réelle.");
-                    }else{toast("Cette prise a déjà été enregistrée.");petRefresh=0;refreshPet();}
-                }).show();
-        });add(room,petEat,8);
-        Button cuddle=button("Un petit câlin ♡",false);cuddle.setOnClickListener(v->{PetStore.care(this);playPet(4);});add(room,cuddle,0);add(page,room,14);
-        LinearLayout gifts=card("prochaine");gifts.addView(text("Nos petits trésors 🎁",18,ink,true));gap(gifts,8);
+        petDrink=button("Boire ensemble",true);petDrink.setOnClickListener(v->drinkWithPet());add(room,petDrink,8);
+        petEat=button("Passer à table",true);petEat.setOnClickListener(v->eatWithPet());add(room,petEat,8);
+        LinearLayout care=horizontal();Button cuddle=button("Un câlin",false);
+        cuddle.setOnClickListener(v->{PetStore.care(this);playPet(4);});care.addView(cuddle,new LinearLayout.LayoutParams(0,-2,1));gapHorizontal(care,8);
+        Button rest=button("Se reposer",false);rest.setOnClickListener(v->restPet());care.addView(rest,new LinearLayout.LayoutParams(0,-2,1));add(room,care,0);add(page,room,14);
+        LinearLayout gifts=card("prochaine");gifts.addView(text("Nos petits trésors",18,ink,true));gap(gifts,8);
         petRewards=text("",14,muted,false);add(gifts,petRewards,10);
         Button claim=button("Ouvrir mes cadeaux",true);claim.setOnClickListener(v->{
             int n=PetStore.pending(this);if(n==0){toast("Tes prochains cadeaux arrivent bientôt !");return;}
-            PetStore.claim(this);playPet(4);toast(n+" cadeau(x) ajouté(s) à ta collection !");
+            PetStore.claim(this);rewardStamp="";playPet(4);toast(n+" cadeau(x) ajouté(s) à ta collection. Choisis un objet pour l'installer !");
         });add(gifts,claim,8);
-        Button wardrobe=button("Mes accessoires et décors",false);wardrobe.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Ma collection").setItems(new String[]{"Accessoires","Décors du dimanche"},(d,w)->collection(w==1,0)).show());add(gifts,wardrobe,0);add(page,gifts,14);
-        page.addView(text("Un accessoire tous les 2 jours après l'adoption. Un décor spécial chaque dimanche suivant l'adoption. Les deux se cumulent et les cadeaux attendent ton retour. Les éditions varient les couleurs.",13,muted,false));gap(page,12);
-        Button rename=button("Prénom et choix du compagnon",false);rename.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Mon compagnon").setItems(new String[]{"Changer son prénom","Choisir un autre animal (garder les cadeaux)"},(d,w)->{if(w==0)namePet(p.getInt("species",0));else{page.removeAllViews();title("Choisis ton compagnon","Tes jours ensemble et tes cadeaux sont conservés.");adoptionGallery();}}).show());add(page,rename,8);
-        toggle("Animations douces","Désactive les mouvements si tu préfères",p.getBoolean("motion",true),on->{p.edit().putBoolean("motion",on).apply();petRefresh=0;refreshPet();});
+        Button wardrobe=button("Ma collection : porter / installer",false);wardrobe.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Ma collection").setItems(new String[]{"Accessoires","Décors du dimanche"},(d,w)->collection(w==1,0)).show());add(gifts,wardrobe,12);
+        rewardPanel=vertical();gifts.addView(rewardPanel);rewardStamp="";add(page,gifts,14);
+        page.addView(text("Un accessoire tous les 2 jours et un décor spécial chaque dimanche suivant l'adoption. Les cadeaux se cumulent, même pendant ton absence. Ton compagnon ne meurt jamais.",13,muted,false));gap(page,12);
+        Button rename=button("Prénom et choix du compagnon",false);rename.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Mon compagnon").setItems(new String[]{"Changer son prénom","Choisir un autre animal (garder les cadeaux)"},(d,w)->{if(w==0)namePet(p.getInt("species",0));else{showAdoption();}}).show());add(page,rename,8);
+        toggle("Animations douces","Respiration, clignements et petits déplacements",p.getBoolean("motion",true),on->{p.edit().putBoolean("motion",on).apply();petRefresh=0;refreshPet();});
         refreshPet();
     }
+    private void showAdoption(){
+        for(PetView view:petSurfaces)view.setForeground(false);petSurfaces.clear();petView=null;
+        page.removeAllViews();title("Choisis ton compagnon","Tes jours ensemble et tes cadeaux sont conservés.");adoptionGallery();
+    }
+    private void drinkWithPet(){
+        PetStore.State state=PetStore.state(this,System.currentTimeMillis());
+        if(!state.drink){toast("C'est la pause boissons. Ton compagnon attend aussi.");petRefresh=0;refreshPet();return;}
+        PetStore.prefs(this).edit().putLong("drink",System.currentTimeMillis()).apply();PetStore.care(this);playPet(2);toast("Ta prise de boisson est enregistrée.");
+    }
+    private void eatWithPet(){
+        PetStore.State state=PetStore.state(this,System.currentTimeMillis());
+        if(state.active){show(0);return;}
+        if(state.meal<0){toast("La prochaine prise n'est pas encore prévue.");return;}
+        final int meal=state.meal;
+        new AlertDialog.Builder(this).setTitle(ScheduleStore.name(meal))
+            .setItems(new String[]{"Je commence maintenant","J'ai déjà commencé"},(d,w)->{
+                if(w==1){correctMealStart(meal);return;}
+                if(ScheduleStore.begin(this,meal,System.currentTimeMillis())){
+                    PetStore.care(this);AlarmScheduler.rescheduleAll(this);petRefresh=0;playPet(1);toast("Repas commencé pour vous deux. Pense à enregistrer la fin réelle.");
+                }else{toast("Cette prise a déjà été enregistrée.");petRefresh=0;refreshPet();}
+            }).show();
+    }
+    private void restPet(){
+        if(PetStore.state(this,System.currentTimeMillis()).active){toast("On termine d'abord le repas tranquillement.");return;}
+        playPet(5);
+    }
+    private int rewardImage(boolean decor,int item){
+        int[] images=decor?new int[]{R.drawable.reward_decor_0,R.drawable.reward_decor_1,R.drawable.reward_decor_2,R.drawable.reward_decor_3}:new int[]{R.drawable.reward_accessory_0,R.drawable.reward_accessory_1,R.drawable.reward_accessory_2,R.drawable.reward_accessory_3,R.drawable.reward_accessory_4,R.drawable.reward_accessory_5};
+        return images[Math.floorMod(item,images.length)];
+    }
+    private void rewardCard(LinearLayout parent,boolean decor,int item,boolean available){
+        LocalDate adopted=PetStore.adoption(this),today=LocalDate.now();
+        LocalDate due=decor?PetRules.nextSpecial(adopted,item):PetRules.nextAccessory(adopted,item);
+        LocalDate from=decor?(item==0?adopted:PetRules.nextSpecial(adopted,item-1)):(item==0?adopted:PetRules.nextAccessory(adopted,item-1));
+        LinearLayout row=horizontal();row.setPadding(0,dp(8),0,dp(8));
+        android.widget.ImageView image=new android.widget.ImageView(this);image.setImageResource(rewardImage(decor,item));image.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);image.setContentDescription("Aperçu de "+(decor?PetStore.decor(item):PetStore.accessory(item)));row.addView(image,new LinearLayout.LayoutParams(dp(88),dp(88)));gapHorizontal(row,12);
+        LinearLayout detail=vertical();detail.addView(text(decor?PetStore.decor(item):PetStore.accessory(item),15,ink,true));gap(detail,4);
+        detail.addView(text(available?"Disponible : ouvre tes cadeaux":due.format(DateTimeFormatter.ofPattern("EEEE d MMMM",Locale.FRANCE)),12,muted,false));
+        android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(100);int progress=PetRules.progress(from,due,today);bar.setProgress(progress);
+        bar.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));bar.setContentDescription("Progression : "+progress+" %");detail.addView(bar,new LinearLayout.LayoutParams(-1,dp(16)));
+        long left=Math.max(0,java.time.temporal.ChronoUnit.DAYS.between(today,due));detail.addView(text(available?"Cadeau débloqué":progress+" % · "+left+" jour(s) restant(s)",12,muted,false));row.addView(detail,new LinearLayout.LayoutParams(0,-2,1));
+        row.setOnClickListener(v->previewReward(decor,item,false));parent.addView(row);
+    }
+    private void refreshRewards(){
+        if(rewardPanel==null)return;android.content.SharedPreferences p=PetStore.prefs(this);
+        String stamp=LocalDate.now()+":"+p.getInt("claimed_a",0)+":"+p.getInt("claimed_s",0);
+        if(stamp.equals(rewardStamp))return;rewardStamp=stamp;rewardPanel.removeAllViews();
+        int a=PetStore.accessories(this),s=PetStore.specials(this);
+        if(a>p.getInt("claimed_a",0))rewardCard(rewardPanel,false,p.getInt("claimed_a",0),true);
+        if(s>p.getInt("claimed_s",0))rewardCard(rewardPanel,true,p.getInt("claimed_s",0),true);
+        rewardPanel.addView(text("Prochains cadeaux à débloquer",15,ink,true));
+        rewardCard(rewardPanel,false,a,false);rewardCard(rewardPanel,false,a+1,false);rewardCard(rewardPanel,true,s,false);
+    }
+    private void previewReward(boolean decor,int item,boolean owned){
+        LinearLayout detail=vertical();detail.setPadding(dp(18),dp(8),dp(18),dp(12));
+        android.widget.ImageView image=new android.widget.ImageView(this);image.setImageResource(rewardImage(decor,item));image.setAdjustViewBounds(true);detail.addView(image,new LinearLayout.LayoutParams(-1,dp(240)));
+        detail.addView(text(decor?"Ambiance de la maison : textiles, couleurs et petits objets décoratifs.":"Accessoire en volume, porté par ton compagnon.",14,muted,false));gap(detail,6);
+        detail.addView(text("Aperçu de la première édition. Les éditions suivantes déclinent les couleurs.",12,muted,false));
+        AlertDialog.Builder dialog=new AlertDialog.Builder(this).setTitle(decor?PetStore.decor(item):PetStore.accessory(item)).setView(detail).setNegativeButton("Fermer",null);
+        if(owned)dialog.setPositiveButton(decor?"Installer":"Porter",(d,w)->{PetStore.prefs(this).edit().putInt(decor?"decor":"accessory",item).apply();playPet(4);});
+        dialog.show();
+    }
     private void adoptionGallery(){
+        int[] portraits={R.drawable.companion_0,R.drawable.companion_1,R.drawable.companion_2,R.drawable.companion_3,R.drawable.companion_4,R.drawable.companion_5,R.drawable.companion_6,R.drawable.companion_7};
         for(int row=0;row<4;row++){
-            LinearLayout pair=horizontal();
-            for(int col=0;col<2;col++){
+            LinearLayout pair=horizontal();for(int col=0;col<2;col++){
                 final int species=row*2+col;LinearLayout cell=vertical();cell.setPadding(dp(5),dp(8),dp(5),dp(8));
-                PetView preview=new PetView(this,species);preview.configure(0,-1,-1,false);cell.addView(preview,new LinearLayout.LayoutParams(-1,dp(145)));
-                Button choose=button(PetStore.NAMES[species],false);choose.setOnClickListener(v->namePet(species));cell.addView(choose,new LinearLayout.LayoutParams(-1,-2));preview.setOnClickListener(v->namePet(species));
-                pair.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
+                android.widget.ImageView preview=new android.widget.ImageView(this);preview.setImageResource(portraits[species]);preview.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);preview.setContentDescription(PetStore.NAMES[species]);cell.addView(preview,new LinearLayout.LayoutParams(-1,dp(145)));
+                Button choose=button(PetStore.NAMES[species],false);choose.setOnClickListener(v->namePet(species));cell.addView(choose,new LinearLayout.LayoutParams(-1,-2));preview.setOnClickListener(v->namePet(species));pair.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
             }add(page,pair,7);
         }
     }
     private void namePet(int species){
         EditText name=new EditText(this);name.setSingleLine(true);name.setHint("Son petit prénom");name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(24)});
         if(PetStore.adopted(this))name.setText(PetStore.name(this));
-        new AlertDialog.Builder(this).setTitle(PetStore.NAMES[species]).setView(name).setPositiveButton("C'est mon compagnon !",(d,w)->{PetStore.adopt(this,species,name.getText().toString());petAction=4;petActionUntil=System.currentTimeMillis()+4000;show(5);}).setNegativeButton("Annuler",null).show();
+        new AlertDialog.Builder(this).setTitle(PetStore.NAMES[species]).setView(name).setPositiveButton("C'est mon compagnon !",(d,w)->{PetStore.adopt(this,species,name.getText().toString());try{CompanionIcon.apply(this,species);}catch(RuntimeException ex){toast("Le compagnon est enregistré. L’icône sera réessayée au prochain lancement.");}petAction=4;petActionUntil=System.currentTimeMillis()+4000;show(5);}).setNegativeButton("Annuler",null).show();
     }
-    private void playPet(int action){petAction=action;petActionUntil=System.currentTimeMillis()+4500;petRefresh=0;refreshPet();}
+    private void playPet(int action){petAction=action;petActionUntil=System.currentTimeMillis()+(action==5?12000:6500);petRefresh=0;refreshPet();}
     private void refreshPet(){
         if(tab!=5||petView==null||petMessage==null)return;
         long now=System.currentTimeMillis();if(now-petRefresh<1000)return;petRefresh=now;
         PetStore.State state=PetStore.state(this,now);android.content.SharedPreferences p=PetStore.prefs(this);
         int hour=java.time.LocalTime.now().getHour();int pose=state.active?1:state.sulk?3:hour<7?5:0;
-        if(now<petActionUntil)pose=petAction;
+        if(now<petActionUntil&&(!state.active||petAction==1))pose=petAction;
         petView.configure(pose,p.getInt("accessory",-1),p.getInt("decor",-1),p.getBoolean("motion",true));
-        petMessage.setText(now<petActionUntil?(pose==2?"Mmm, une petite pause ensemble 💧":pose==4?"Quel bonheur de te retrouver !":"Bon appétit à nous deux !"):state.message);
+        petMessage.setText(pose==5?"Un petit moment de repos dans mon lit…":pose==2?"À notre santé, avec mon verre d'eau !":pose==4?"Quel bonheur de te retrouver !":state.message);
         petDrink.setEnabled(state.drink);petDrink.setAlpha(state.drink?1f:.5f);petDrink.setText(state.drink?"On boit 💧":"Pause boissons · on attend");
         petEat.setEnabled(state.active||state.meal>=0);petEat.setAlpha(state.active||state.meal>=0?1f:.5f);petEat.setText(state.active?"Enregistrer la fin du repas":state.meal>=0?"On mange · "+ScheduleStore.name(state.meal):"On mangera à la prochaine prise");
         String lastDrink=p.getLong("drink",0)>0?"\nDernière boisson : "+Instant.ofEpochMilli(p.getLong("drink",0)).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM à HH:mm")):"";
+        refreshRewards();
         petRewards.setText(PetStore.pending(this)+" cadeau(x) à ouvrir · "+p.getInt("claimed_a",0)+" accessoires · "+p.getInt("claimed_s",0)+" décors"+lastDrink);
     }
     private void collection(boolean decor,int offset){
-        android.content.SharedPreferences p=PetStore.prefs(this);int count=p.getInt(decor?"claimed_s":"claimed_a",0);
-        int end=Math.min(count,offset+30);List<String> labels=new ArrayList<>();labels.add(decor?"Décor simple":"Sans accessoire");
-        for(int i=offset;i<end;i++)labels.add(decor?PetStore.decor(i):PetStore.accessory(i));
-        if(end<count)labels.add("Suivants →");if(offset>0)labels.add("← Précédents");
-        new AlertDialog.Builder(this).setTitle((decor?"Décors":"Accessoires")+" · "+count+" débloqué(s)").setItems(labels.toArray(new String[0]),(d,w)->{
-            if(w>0&&w<=end-offset){p.edit().putInt(decor?"decor":"accessory",offset+w-1).apply();playPet(4);}
-            else if(w==0){p.edit().putInt(decor?"decor":"accessory",-1).apply();petRefresh=0;refreshPet();}
-            else if(end<count&&w==end-offset+1)collection(decor,end);
-            else collection(decor,Math.max(0,offset-30));
-        }).setNegativeButton("Fermer",null).show();
+        android.content.SharedPreferences p=PetStore.prefs(this);int count=p.getInt(decor?"claimed_s":"claimed_a",0),end=Math.min(count,offset+12);
+        LinearLayout items=vertical();items.setPadding(dp(14),dp(8),dp(14),dp(8));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle((decor?"Décors":"Accessoires")+" · "+count+" débloqué(s)").setNegativeButton("Fermer",null).create();
+        Button remove=button(decor?"Maison d'origine":"Sans accessoire",false);remove.setOnClickListener(v->{p.edit().putInt(decor?"decor":"accessory",-1).apply();dialog.dismiss();playPet(4);});add(items,remove,8);
+        if(count==0)items.addView(text("Tes cadeaux apparaîtront ici après leur ouverture.",14,muted,false));
+        for(int i=offset;i<end;i++){
+            final int item=i;LinearLayout row=horizontal();android.widget.ImageView image=new android.widget.ImageView(this);image.setImageResource(rewardImage(decor,i));row.addView(image,new LinearLayout.LayoutParams(dp(72),dp(72)));gapHorizontal(row,10);
+            TextView label=text((decor?PetStore.decor(i):PetStore.accessory(i))+(p.getInt(decor?"decor":"accessory",-1)==i?" · installé":""),14,ink,true);row.addView(label,new LinearLayout.LayoutParams(0,-2,1));row.setOnClickListener(v->{dialog.dismiss();previewReward(decor,item,true);});items.addView(row);
+        }
+        if(end<count){Button next=button("Suivants",false);next.setOnClickListener(v->{dialog.dismiss();collection(decor,end);});add(items,next,8);}
+        if(offset>0){Button previous=button("Précédents",false);previous.setOnClickListener(v->{dialog.dismiss();collection(decor,Math.max(0,offset-12));});add(items,previous,8);}
+        ScrollView scroll=new ScrollView(this);scroll.addView(items);dialog.setView(scroll);dialog.show();
     }
     private void toast(String message){Toast.makeText(this,message,Toast.LENGTH_LONG).show();}
 }
