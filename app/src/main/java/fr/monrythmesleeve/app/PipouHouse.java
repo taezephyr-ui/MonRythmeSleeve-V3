@@ -11,12 +11,13 @@ import org.json.JSONObject;
 import java.time.LocalDate;
 
 /** Local 2D companion. Data flows only from the real history into the game. */
-public final class PipouActivity extends Activity {
-    private WebView game;
+final class PipouHouse {
+    private final Activity host;
+    WebView game;
     private boolean ready, foreground;
-    @Override public void onCreate(Bundle state) {
-        super.onCreate(state);
-        game=new WebView(this);
+    PipouHouse(Activity host) {
+        this.host=host;
+        game=new WebView(host);
         WebSettings settings=game.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -26,10 +27,10 @@ public final class PipouActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){return true;}
             @Override public void onPageFinished(WebView v,String url){
                 if(!"file:///android_asset/pipou.html".equals(url))return;
-                ready=true;if(foreground)sync();
+                if(game!=v)return;ready=true;if(foreground)sync();
             }
         });
-        setContentView(game);
+
         game.loadUrl("file:///android_asset/pipou.html");
     }
     private void sync(){
@@ -37,7 +38,7 @@ public final class PipouActivity extends Activity {
         LocalDate today=LocalDate.now(); long now=System.currentTimeMillis();
         String snapshot="null";
         // Include last night's plan for the late snack. A finish-only entry never starts a meal.
-        try(HistoryStore db=new HistoryStore(this); Cursor row=db.getReadableDatabase().rawQuery(
+        try(HistoryStore db=new HistoryStore(host); Cursor row=db.getReadableDatabase().rawQuery(
             "SELECT day,meal,title,started,finished FROM meals WHERE day IN (?,?) AND ((started>0 AND started<=?) OR (finished>0 AND finished<=?)) ORDER BY MAX(COALESCE(started,0),COALESCE(finished,0)) DESC,meal DESC LIMIT 1",
             new String[]{today.toString(),today.minusDays(1).toString(),Long.toString(now),Long.toString(now)})){
             if(row.moveToFirst()&&row.getLong(3)>0&&row.getLong(4)==0){
@@ -51,7 +52,7 @@ public final class PipouActivity extends Activity {
         }
         game.evaluateJavascript("if(window.pipouSleeve){pipouSleeve.visibility(true);pipouSleeve.receive("+snapshot+");}",null);
     }
-    @Override protected void onResume(){super.onResume();foreground=true;if(game!=null){game.onResume();sync();}}
-    @Override protected void onPause(){foreground=false;if(game!=null){if(ready)game.evaluateJavascript("window.pipouSleeve&&pipouSleeve.visibility(false)",null);game.onPause();}super.onPause();}
-    @Override protected void onDestroy(){if(game!=null){game.destroy();game=null;}super.onDestroy();}
+    void resume(){foreground=true;if(game!=null){game.onResume();sync();}}
+    void pause(){foreground=false;if(game!=null){if(ready)game.evaluateJavascript("window.pipouSleeve&&pipouSleeve.visibility(false)",null);game.onPause();}}
+    void close(){if(game.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)game.getParent()).removeView(game);if(game!=null){game.destroy();game=null;}}
 }

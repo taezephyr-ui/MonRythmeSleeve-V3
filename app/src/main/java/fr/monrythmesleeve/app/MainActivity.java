@@ -65,7 +65,8 @@ public class MainActivity extends Activity {
     private boolean cachedMealActive;
     private long lastEventRefresh;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable ticker=new Runnable(){@Override public void run(){if(tab==0)updateStatus();if(tab==5)refreshPet();handler.postDelayed(this,1000);}};
+    private final Runnable ticker=new Runnable(){@Override public void run(){if(tab==0)updateStatus();handler.postDelayed(this,1000);}};
+    private PipouHouse house;
     private PetView petView;
     private TextView petMessage,petRewards;
     private Button petDrink,petEat;
@@ -84,8 +85,8 @@ public class MainActivity extends Activity {
         if(PetStore.adopted(this)){try{CompanionIcon.apply(this,PetStore.prefs(this).getInt("species",0));}catch(RuntimeException ignored){}}
         show(0);
     }
-    @Override protected void onResume(){super.onResume();handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(true);handler.post(ticker);}
-    @Override protected void onPause(){handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(false);super.onPause();}
+    @Override protected void onResume(){super.onResume();if(house!=null)house.resume();handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(true);handler.post(ticker);}
+    @Override protected void onPause(){if(house!=null)house.pause();handler.removeCallbacks(ticker);for(PetView view:petSurfaces)view.setForeground(false);super.onPause();}
     @Override public void onRequestPermissionsResult(int code,String[] perms,int[] results){
         super.onRequestPermissionsResult(code,perms,results);
         if(code==200&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)AlarmScheduler.rescheduleAll(this);
@@ -145,7 +146,10 @@ public class MainActivity extends Activity {
     private LinearLayout card(String id){LinearLayout c=vertical();c.setPadding(dp(16),dp(15),dp(16),dp(15));c.setBackground(style(id));return c;}
     private String cardTitle(String id){for(int i=0;i<CARDS.length;i++)if(CARDS[i].equals(id))return CARD_NAMES[i];return id;}
     private void title(String heading,String subtitle){page.addView(text(heading,22,ink,true));gap(page,5);if(!subtitle.isEmpty())page.addView(text(subtitle,13,muted,false));gap(page,16);}
+    @Override protected void onDestroy(){if(house!=null)house.close();super.onDestroy();}
     private void show(int index){
+        if(index==5 && house!=null)return;
+        if(house!=null){house.pause();house.close();house=null;}
         for(PetView view:petSurfaces)view.setForeground(false);petSurfaces.clear();
         tab=index;petView=null;petRefresh=0;lastEventRefresh=0;cachedEvents=null;theme();root=vertical();root.setBackground(style("fond"));setContentView(root);
         getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(navBg);
@@ -154,9 +158,15 @@ public class MainActivity extends Activity {
         head.addView(text("✿  Mon Rythme Sleeve",20,accent,true));
         String date=LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM",Locale.FRANCE));
         head.addView(text(date.substring(0,1).toUpperCase(Locale.FRANCE)+date.substring(1),12,muted,false));root.addView(head);
+        if(index==5){
+            house=new PipouHouse(this);
+            root.addView(house.game,new LinearLayout.LayoutParams(-1,0,1));
+            house.resume();
+        }else{
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);page=vertical();page.setPadding(dp(18),dp(14),dp(18),dp(26));
         scroll.addView(page);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(index==0)home();else if(index==1)planning();else if(index==2)history();else if(index==3)alerts();else if(index==5)companion();else settings();
+        if(index==0)home();else if(index==1)planning();else if(index==2)history();else if(index==3)alerts();else settings();
+        }
         LinearLayout nav=horizontal();nav.setPadding(dp(3),dp(7),dp(3),dp(7));nav.setBackgroundColor(navBg);
         for(int i=0;i<TABS.length;i++){
             final int target=i;LinearLayout cell=vertical();cell.setGravity(Gravity.CENTER);cell.setPadding(dp(2),dp(4),dp(2),dp(4));
@@ -502,44 +512,6 @@ public class MainActivity extends Activity {
                         }).setNegativeButton("Annuler",null).show();
                 },z.getHour(),z.getMinute(),true).show();
             }).setNegativeButton("Annuler",null).show();
-    }
-    private void companion(){
-        Button openPipou=button("Retrouver Pipou dans sa maison",true);
-        openPipou.setOnClickListener(v->startActivity(new Intent(this,PipouActivity.class)));
-        add(page,openPipou,12);
-        title("La maison de mon compagnon","Une petite vie à partager, à notre rythme.");
-        if(!PetStore.adopted(this)){adoptionGallery();return;}
-        android.content.SharedPreferences p=PetStore.prefs(this);
-        LinearLayout room=card("soutien");room.addView(text(PetStore.name(this),24,ink,true));
-        room.addView(text("Ensemble depuis "+PetRules.days(PetStore.adoption(this),LocalDate.now())+" jours",13,muted,false));
-        petView=new PetView(this,p.getInt("species",0));petSurfaces.add(petView);
-        room.addView(petView,new LinearLayout.LayoutParams(-1,dp(350)));
-        petView.setInteraction(action->{
-            if("drink".equals(action)){drinkWithPet();return;}
-            if("eat".equals(action)){eatWithPet();return;}
-            if("sleep".equals(action)){restPet();return;}
-            if("cuddle".equals(action)){PetStore.care(this);playPet(4);return;}
-            toast("Touche l'assiette, le verre, le lit ou ton compagnon.");
-        });
-        room.addView(text("Touche l'assiette, le verre, le lit ou ton compagnon.",12,muted,false));gap(room,10);
-        petMessage=text("",15,ink,true);add(room,petMessage,12);
-        petDrink=button("Boire ensemble",true);petDrink.setOnClickListener(v->drinkWithPet());add(room,petDrink,8);
-        petEat=button("Passer à table",true);petEat.setOnClickListener(v->eatWithPet());add(room,petEat,8);
-        LinearLayout care=horizontal();Button cuddle=button("Un câlin",false);
-        cuddle.setOnClickListener(v->{PetStore.care(this);playPet(4);});care.addView(cuddle,new LinearLayout.LayoutParams(0,-2,1));gapHorizontal(care,8);
-        Button rest=button("Se reposer",false);rest.setOnClickListener(v->restPet());care.addView(rest,new LinearLayout.LayoutParams(0,-2,1));add(room,care,0);add(page,room,14);
-        LinearLayout gifts=card("prochaine");gifts.addView(text("Nos petits trésors",18,ink,true));gap(gifts,8);
-        petRewards=text("",14,muted,false);add(gifts,petRewards,10);
-        Button claim=button("Ouvrir mes cadeaux",true);claim.setOnClickListener(v->{
-            int n=PetStore.pending(this);if(n==0){toast("Tes prochains cadeaux arrivent bientôt !");return;}
-            PetStore.claim(this);rewardStamp="";playPet(4);toast(n+" cadeau(x) ajouté(s) à ta collection. Choisis un objet pour l'installer !");
-        });add(gifts,claim,8);
-        Button wardrobe=button("Ma collection : porter / installer",false);wardrobe.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Ma collection").setItems(new String[]{"Accessoires","Décors du dimanche"},(d,w)->collection(w==1,0)).show());add(gifts,wardrobe,12);
-        rewardPanel=vertical();gifts.addView(rewardPanel);rewardStamp="";add(page,gifts,14);
-        page.addView(text("Un accessoire tous les 2 jours et un décor spécial chaque dimanche suivant l'adoption. Les cadeaux se cumulent, même pendant ton absence. Ton compagnon ne meurt jamais.",13,muted,false));gap(page,12);
-        Button rename=button("Prénom et choix du compagnon",false);rename.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Mon compagnon").setItems(new String[]{"Changer son prénom","Choisir un autre animal (garder les cadeaux)"},(d,w)->{if(w==0)namePet(p.getInt("species",0));else{showAdoption();}}).show());add(page,rename,8);
-        toggle("Animations douces","Respiration, clignements et petits déplacements",p.getBoolean("motion",true),on->{p.edit().putBoolean("motion",on).apply();petRefresh=0;refreshPet();});
-        refreshPet();
     }
     private void showAdoption(){
         for(PetView view:petSurfaces)view.setForeground(false);petSurfaces.clear();petView=null;

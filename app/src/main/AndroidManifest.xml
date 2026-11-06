@@ -10,7 +10,6 @@
         android:label="Mon Rythme Sleeve"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false" android:supportsRtl="true">
-        <activity android:name=".PipouActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
 
         </activity>
